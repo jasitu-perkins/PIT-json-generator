@@ -5,7 +5,7 @@ import uuid
 # --- Page Configuration ---
 st.set_page_config(layout="wide", page_title="Perkins Integration Toolkit")
 
-# --- Data Dictionaries for Conditional Logic ---
+# --- Data Dictionaries for Standard Logic ---
 FUNCTIONS = [
     'addLead', 'addContact', 'addCampaignMember', 
     'addToPublicationList', 'addToPublicationListV2', 
@@ -24,6 +24,58 @@ TARGET_MAPS = {
 
 FORMATS = ['None', 'concatenate', 'datetime']
 OPTION_TYPES = ['addToPublicationListByCampaign', 'addToPublicationListByListId', 'addCampaignMember', 'addOrganizationAccount']
+
+# --- Prebuilt Templates from Toolkit Examples ---
+TEMPLATES = {
+    "Example: Add Lead (Multiple Options)": [
+        {
+            'name': 'lead',
+            'function': 'addLead',
+            'environment': 're',
+            'options': [
+                {'option': 'addToPublicationListByListId', 'value': '123'},
+                {'option': 'addCampaignMember', 'value': '7016Q000001MRZZQA4'}
+            ],
+            'maps': [
+                {'source': 'firstname', 'target': 'FirstName', 'format': 'None', 'value': '', 'path': ''},
+                {'source': 'lastname', 'target': 'LastName', 'format': 'None', 'value': '', 'path': ''},
+                {'source': 'email', 'target': 'Email', 'format': 'None', 'value': '', 'path': ''}
+            ]
+        }
+    ],
+    "Example: Add to Publication List By Campaign": [
+        {
+            'name': 'lead',
+            'function': 'addLead',
+            'environment': 're',
+            'options': [
+                {'option': 'addToPublicationListByCampaign', 'value': '7016Q000001MRZZQA4'}
+            ],
+            'maps': [
+                {'source': 'firstname', 'target': 'FirstName', 'format': 'None', 'value': '', 'path': ''},
+                {'source': 'lastname', 'target': 'LastName', 'format': 'None', 'value': '', 'path': ''},
+                {'source': 'email', 'target': 'Email', 'format': 'None', 'value': '', 'path': ''},
+                {'source': 'leadsource', 'target': 'LeadSource', 'format': 'None', 'value': '', 'path': ''}
+            ]
+        }
+    ],
+    "Example: Add Organization Account": [
+        {
+            'name': 'contact',
+            'function': 'addContact',
+            'environment': 're',
+            'options': [
+                {'option': 'addOrganizationAccount', 'value': 'Mapped inside options normally (see guide)'}
+            ],
+            'maps': [
+                {'source': 'firstname', 'target': 'FirstName', 'format': 'None', 'value': '', 'path': ''},
+                {'source': 'lastname', 'target': 'LastName', 'format': 'None', 'value': '', 'path': ''},
+                {'source': 'email', 'target': 'Email', 'format': 'None', 'value': '', 'path': ''},
+                {'source': 'leadsource', 'target': 'LeadSource', 'format': 'None', 'value': '', 'path': ''}
+            ]
+        }
+    ]
+}
 
 # --- State Management ---
 def init_state():
@@ -77,10 +129,12 @@ def remove_option(step_id, option_id):
 def add_map(step_id):
     for s in st.session_state.steps:
         if s['id'] == step_id:
+            # Default to first available target map or blank
+            default_target = TARGET_MAPS[s['function']][0] if TARGET_MAPS.get(s['function']) else ''
             s['maps'].append({
                 'id': str(uuid.uuid4()), 
                 'source': '', 
-                'target': TARGET_MAPS[s['function']][0] if TARGET_MAPS.get(s['function']) else '', 
+                'target': default_target, 
                 'format': 'None', 
                 'value': '', 
                 'path': ''
@@ -90,6 +144,37 @@ def remove_map(step_id, map_id):
     for s in st.session_state.steps:
         if s['id'] == step_id:
             s['maps'] = [m for m in s['maps'] if m['id'] != map_id]
+
+def load_template(template_name):
+    """Loads a predefined template into the session state with fresh UUIDs."""
+    if template_name and template_name != "Select a template...":
+        new_steps = []
+        for s in TEMPLATES[template_name]:
+            new_step = {
+                'id': str(uuid.uuid4()),
+                'name': s['name'],
+                'function': s['function'],
+                'environment': s['environment'],
+                'options': [],
+                'maps': []
+            }
+            for o in s['options']:
+                new_step['options'].append({
+                    'id': str(uuid.uuid4()),
+                    'option': o['option'],
+                    'value': o['value']
+                })
+            for m in s['maps']:
+                new_step['maps'].append({
+                    'id': str(uuid.uuid4()),
+                    'source': m['source'],
+                    'target': m['target'],
+                    'format': m['format'],
+                    'value': m['value'],
+                    'path': m['path']
+                })
+            new_steps.append(new_step)
+        st.session_state.steps = new_steps
 
 # --- JSON Generation ---
 def generate_json():
@@ -133,12 +218,27 @@ def generate_json():
 st.title("🗄️ Perkins Integration Toolkit")
 st.caption("Configure your automated processes and data mappings.")
 
-# Create a split layout mimicking the React app
 col_left, col_right = st.columns([3, 2], gap="large")
 
 with col_left:
     st.subheader("Form Builder")
     
+    # Template Selector UI
+    with st.container(border=True):
+        st.markdown("##### 📝 Load from Template")
+        t_col1, t_col2 = st.columns([3, 1])
+        selected_template = t_col1.selectbox(
+            "Choose an example from the toolkit guide:", 
+            ["Select a template..."] + list(TEMPLATES.keys()), 
+            label_visibility="collapsed"
+        )
+        if t_col2.button("Apply Template", use_container_width=True, type="secondary"):
+            if selected_template != "Select a template...":
+                load_template(selected_template)
+                st.rerun()
+    
+    st.divider()
+
     for i, step in enumerate(st.session_state.steps):
         with st.container(border=True):
             cols_header = st.columns([10, 1])
@@ -151,12 +251,21 @@ with col_left:
             sc1, sc2, sc3 = st.columns(3)
             step['name'] = sc1.text_input("Step Name (Unique)", value=step['name'], key=f"name_{step['id']}")
             
-            # Update targets dynamically based on function selection
-            old_func = step['function']
-            step['function'] = sc2.selectbox("Process Function", FUNCTIONS, index=FUNCTIONS.index(step['function']), key=f"func_{step['id']}")
+            # Smart Process Function Selector (Allows Custom)
+            func_options = FUNCTIONS + ["Custom..."]
+            curr_func = step['function']
+            is_custom_func = curr_func not in FUNCTIONS
+            func_index = func_options.index("Custom...") if is_custom_func else func_options.index(curr_func)
             
-            # If function changed, reset targets in existing maps to prevent invalid states
-            if old_func != step['function']:
+            selected_func = sc2.selectbox("Process Function", func_options, index=func_index, key=f"func_sel_{step['id']}")
+            
+            if selected_func == "Custom...":
+                step['function'] = sc2.text_input("Custom Function Name", value=curr_func if is_custom_func else "", key=f"func_cust_{step['id']}")
+            else:
+                step['function'] = selected_func
+
+            # Reset targets in existing maps if function changed significantly
+            if selected_func != "Custom..." and curr_func != step['function']:
                 default_target = TARGET_MAPS[step['function']][0] if TARGET_MAPS.get(step['function']) else ""
                 for m in step['maps']:
                     m['target'] = default_target
@@ -178,8 +287,21 @@ with col_left:
             for opt in step['options']:
                 with st.container(border=True):
                     oc1, oc2, oc3 = st.columns([4, 4, 1])
-                    opt['option'] = oc1.selectbox("Option Type", OPTION_TYPES, index=OPTION_TYPES.index(opt['option']), key=f"opttype_{opt['id']}")
+                    
+                    # Smart Option Type Selector
+                    opt_types = OPTION_TYPES + ["Custom..."]
+                    curr_opt = opt['option']
+                    is_custom_opt = curr_opt not in OPTION_TYPES
+                    opt_index = opt_types.index("Custom...") if is_custom_opt else opt_types.index(curr_opt)
+                    
+                    selected_opt = oc1.selectbox("Option Type", opt_types, index=opt_index, key=f"opttype_sel_{opt['id']}")
+                    if selected_opt == "Custom...":
+                        opt['option'] = oc1.text_input("Custom Option Name", value=curr_opt if is_custom_opt else "", key=f"opttype_cust_{opt['id']}")
+                    else:
+                        opt['option'] = selected_opt
+
                     opt['value'] = oc2.text_input("Value", value=opt['value'], key=f"optval_{opt['id']}")
+                    
                     if oc3.button("🗑️", key=f"del_opt_{opt['id']}"):
                         remove_option(step['id'], opt['id'])
                         st.rerun()
@@ -202,16 +324,25 @@ with col_left:
 
                     mc1, mc2, mc3, mc4 = st.columns(4)
                     
-                    # Target dropdown (depends on selected step function)
-                    available_targets = TARGET_MAPS.get(step['function'], ["Custom..."])
-                    current_target = m['target'] if m['target'] in available_targets else available_targets[0]
-                    m['target'] = mc1.selectbox("Target Field", available_targets, index=available_targets.index(current_target), key=f"maptgt_{m['id']}")
+                    # Smart Target Selector (Depends on selected step function + Custom)
+                    available_targets = TARGET_MAPS.get(step['function'], []) + ["Custom..."]
+                    curr_tgt = m['target']
+                    is_custom_tgt = curr_tgt not in TARGET_MAPS.get(step['function'], [])
+                    tgt_index = available_targets.index("Custom...") if is_custom_tgt else available_targets.index(curr_tgt)
+                    
+                    selected_tgt = mc1.selectbox("Target Field", available_targets, index=tgt_index, key=f"maptgt_sel_{m['id']}")
+                    
+                    if selected_tgt == "Custom...":
+                         m['target'] = mc1.text_input("Custom Target Name", value=curr_tgt if is_custom_tgt else "", key=f"maptgt_cust_{m['id']}")
+                    else:
+                         m['target'] = selected_tgt
                     
                     # Source vs Value Logic (Disable one if the other is filled)
                     has_value = bool(m['value'])
                     has_source = bool(m['source'])
                     
-                    m['source'] = mc2.text_input("Source (Jotform)", value=m['source'], disabled=has_value, key=f"mapsrc_{m['id']}")
+                    # Removed "Jotform" reference, generalized to "Source Field"
+                    m['source'] = mc2.text_input("Source Field", value=m['source'], disabled=has_value, key=f"mapsrc_{m['id']}")
                     m['value'] = mc3.text_input("Constant Value", value=m['value'], disabled=has_source, key=f"mapval_{m['id']}", help="Overrides Source")
                     
                     # Format
@@ -228,7 +359,7 @@ with col_left:
 # --- Live JSON Preview ---
 with col_right:
     st.subheader("JSON Output")
-    st.caption("Ready for JotForms / Form Assembly. Hover over the code block to copy.")
+    st.caption("Ready for your form builder configuration. Hover over the code block to copy.")
     
     # Generate live JSON based on current state
     output_json = generate_json()
