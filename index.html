@@ -1,430 +1,332 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, Copy, Check, ChevronDown, Settings, Database } from 'lucide-react';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perkins Integration Toolkit</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #f8fafc; color: #1e293b; }
+        .card { background: white; border-radius: 0.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; }
+        .btn-primary { background-color: #2563eb; color: white; padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; transition: all 0.2s; }
+        .btn-primary:hover { background-color: #1d4ed8; }
+        .btn-danger { color: #ef4444; padding: 0.25rem; border-radius: 0.375rem; transition: all 0.2s; }
+        .btn-danger:hover { background-color: #fee2e2; }
+        .input-field { width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; outline: none; }
+        .input-field:focus { border-color: #3b82f6; ring: 2px ring-blue-200; }
+        .label { font-size: 0.875rem; font-weight: 600; color: #475569; margin-bottom: 0.25rem; display: block; }
+        pre { background-color: #0f172a; color: #e2e8f0; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; font-family: 'ui-monospace', monospace; font-size: 0.875rem; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-slate-900">🗄️ Perkins Integration Toolkit</h1>
+            <p class="text-slate-500">Configure your automated processes and data mappings.</p>
+        </header>
 
-// --- Data Dictionaries for Conditional Logic ---
-const FUNCTIONS = [
-  'addLead', 'addContact', 'addCampaignMember', 
-  'addToPublicationList', 'addToPublicationListV2', 
-  'addOrganizationAccount', 'addTask'
-];
-
-const TARGET_MAPS = {
-  addLead: ['FirstName', 'LastName', 'Email', 'Street', 'City', 'StateCode', 'CountryCode', 'PostalCode', 'Company', 'LeadSource', 'Lead_Source_Detail__c'],
-  addContact: ['FirstName', 'LastName', 'Email', 'MailingStreet', 'MailingCity', 'MailingStateCode', 'MailingCountryCode', 'MailingPostalCode', 'LeadSource', 'Con_SrcDtl__c', 'AccountId', 'RecordType'],
-  addCampaignMember: ['CampaignId', 'LeadId', 'ContactId', 'Status'],
-  addToPublicationList: ['LeadId', 'ContactId', 'Campaign__c', 'Publication_List__c', '_optIn'],
-  addToPublicationListV2: ['LeadId', 'ContactId', 'Campaign__c', 'Publication_List__c', '_optIn'],
-  addOrganizationAccount: ['Name', 'BillingStreet', 'BillingCity', 'BillingStateCode', 'BillingPostalCode', 'BillingCountryCode', 'ShippingStreet', 'ShippingCity', 'ShippingStateCode', 'ShippingPostalCode', 'ShippingCountryCode', 'ContactId', 'npe5__Role__c'],
-  addTask: ['Subject', 'Description', 'ContactId', 'LeadId', 'WhatId', 'Status', 'RecordType', 'Campaign__c']
-};
-
-const FORMATS = ['concatenate', 'datetime'];
-const OPTION_TYPES = ['addToPublicationListByCampaign', 'addToPublicationListByListId', 'addCampaignMember', 'addOrganizationAccount'];
-
-export default function App() {
-  const [steps, setSteps] = useState([
-    {
-      id: Date.now(),
-      name: 'step1',
-      function: 'addLead',
-      environment: 're',
-      options: [],
-      maps: [{ id: Date.now() + 1, source: '', target: '', format: '', value: '', path: '' }]
-    }
-  ]);
-  const [copied, setCopied] = useState(false);
-
-  // --- State Handlers ---
-  const addStep = () => {
-    setSteps([...steps, { 
-      id: Date.now(), 
-      name: `step${steps.length + 1}`, 
-      function: 'addLead', 
-      environment: 're', 
-      options: [], 
-      maps: [] 
-    }]);
-  };
-
-  const updateStep = (stepId, field, value) => {
-    setSteps(steps.map(s => s.id === stepId ? { ...s, [field]: value } : s));
-  };
-
-  const removeStep = (stepId) => {
-    setSteps(steps.filter(s => s.id !== stepId));
-  };
-
-  const addMap = (stepId) => {
-    setSteps(steps.map(s => {
-      if (s.id === stepId) {
-        return { ...s, maps: [...s.maps, { id: Date.now(), source: '', target: '', format: '', value: '', path: '' }] };
-      }
-      return s;
-    }));
-  };
-
-  const updateMap = (stepId, mapId, field, value) => {
-    setSteps(steps.map(s => {
-      if (s.id === stepId) {
-        const updatedMaps = s.maps.map(m => m.id === mapId ? { ...m, [field]: value } : m);
-        return { ...s, maps: updatedMaps };
-      }
-      return s;
-    }));
-  };
-
-  const removeMap = (stepId, mapId) => {
-    setSteps(steps.map(s => {
-      if (s.id === stepId) {
-        return { ...s, maps: s.maps.filter(m => m.id !== mapId) };
-      }
-      return s;
-    }));
-  };
-
-  const addOption = (stepId) => {
-    setSteps(steps.map(s => {
-      if (s.id === stepId) {
-        return { ...s, options: [...s.options, { id: Date.now(), option: OPTION_TYPES[0], value: '' }] };
-      }
-      return s;
-    }));
-  };
-
-  const updateOption = (stepId, optionId, field, value) => {
-    setSteps(steps.map(s => {
-      if (s.id === stepId) {
-        const updatedOptions = s.options.map(o => o.id === optionId ? { ...o, [field]: value } : o);
-        return { ...s, options: updatedOptions };
-      }
-      return s;
-    }));
-  };
-
-  const removeOption = (stepId, optionId) => {
-    setSteps(steps.map(s => {
-      if (s.id === stepId) {
-        return { ...s, options: s.options.filter(o => o.id !== optionId) };
-      }
-      return s;
-    }));
-  };
-
-  // --- JSON Generation ---
-  const generateJSON = () => {
-    const cleanSteps = steps.map(s => {
-      const stepObj = {
-        name: s.name,
-        function: s.function,
-        environment: s.environment,
-      };
-
-      // Clean Options
-      if (s.options.length > 0) {
-        const cleanOptions = s.options.map(o => ({
-          option: o.option,
-          value: o.value
-        })).filter(o => o.option || o.value);
-        if (cleanOptions.length > 0) stepObj.options = cleanOptions;
-      }
-
-      // Clean Maps
-      if (s.maps.length > 0) {
-        const cleanMaps = s.maps.map(m => {
-          const mObj = {};
-          if (m.source) mObj.source = m.source;
-          if (m.target) mObj.target = m.target;
-          if (m.format) mObj.format = m.format;
-          if (m.value) mObj.value = m.value;
-          if (m.path) mObj.path = m.path;
-          return mObj;
-        }).filter(m => Object.keys(m).length > 0);
-        
-        if (cleanMaps.length > 0) stepObj.map = cleanMaps;
-      }
-
-      return stepObj;
-    });
-
-    return JSON.stringify({ process: { step: cleanSteps } }, null, 2);
-  };
-
-  const handleCopy = () => {
-    const text = generateJSON();
-    const textArea = document.createElement("textarea");
-    textArea.value = text;
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-    try {
-      document.execCommand('copy');
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Unable to copy', err);
-    }
-    document.body.removeChild(textArea);
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans text-gray-800">
-      
-      {/* LEFT PANEL: Form Builder */}
-      <div className="w-full md:w-1/2 lg:w-3/5 p-6 overflow-y-auto border-r border-gray-200">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Database className="w-6 h-6 text-blue-600" />
-            Perkins Integration Toolkit
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">Configure your automated processes and data mappings.</p>
-        </div>
-
-        <div className="space-y-8">
-          {steps.map((step, index) => (
-            <div key={step.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="bg-slate-800 px-4 py-3 flex justify-between items-center text-white">
-                <h2 className="font-semibold flex items-center gap-2">
-                  <span className="bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded-md">Step {index + 1}</span>
-                  {step.name || 'Unnamed Step'}
-                </h2>
-                <button 
-                  onClick={() => removeStep(step.id)}
-                  className="text-gray-300 hover:text-red-400 transition-colors"
-                  title="Remove Step"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-              
-              <div className="p-5 space-y-6">
-                {/* Step Fundamentals */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Step Name (Unique)</label>
-                    <input 
-                      type="text" 
-                      value={step.name}
-                      onChange={(e) => updateStep(step.id, 'name', e.target.value)}
-                      className="w-full text-sm p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      placeholder="e.g. lead"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Process Function</label>
-                    <div className="relative">
-                      <select 
-                        value={step.function}
-                        onChange={(e) => updateStep(step.id, 'function', e.target.value)}
-                        className="w-full text-sm p-2 border border-gray-300 rounded appearance-none focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
-                      >
-                        {FUNCTIONS.map(f => <option key={f} value={f}>{f}</option>)}
-                      </select>
-                      <ChevronDown className="w-4 h-4 text-gray-400 absolute right-2 top-2.5 pointer-events-none" />
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Form Builder Side -->
+            <div class="lg:col-span-2 space-y-6">
+                
+                <!-- Template Loader -->
+                <div class="card p-6">
+                    <h2 class="text-lg font-bold mb-4 flex items-center">📝 Load from Template</h2>
+                    <div class="flex gap-4">
+                        <select id="templateSelector" class="input-field flex-grow">
+                            <option value="">Select a template...</option>
+                            <option value="lead_mult">Example: Add Lead (Multiple Options)</option>
+                            <option value="pub_camp">Example: Add to Publication List By Campaign</option>
+                            <option value="org_acc">Example: Add Organization Account</option>
+                        </select>
+                        <button onclick="applyTemplate()" class="btn-primary whitespace-nowrap">Apply Template</button>
                     </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Environment</label>
-                    <input 
-                      type="text" 
-                      value={step.environment}
-                      onChange={(e) => updateStep(step.id, 'environment', e.target.value)}
-                      className="w-full text-sm p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      placeholder="e.g. re"
-                    />
-                  </div>
                 </div>
 
-                {/* Options Section */}
-                <div className="border-t border-gray-100 pt-4">
-                  <div className="flex justify-between items-center mb-3">
-                    <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1">
-                      <Settings className="w-4 h-4 text-gray-400" /> Options
-                    </h3>
-                    <button 
-                      onClick={() => addOption(step.id)}
-                      className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-                    >
-                      <Plus className="w-3 h-3" /> Add Option
-                    </button>
-                  </div>
-                  
-                  {step.options.length === 0 && (
-                    <p className="text-xs text-gray-400 italic">No options configured. Add an option if needed.</p>
-                  )}
-
-                  <div className="space-y-2">
-                    {step.options.map(option => (
-                      <div key={option.id} className="flex gap-2 items-start bg-gray-50 p-2 rounded border border-gray-200">
-                         <div className="flex-1 relative">
-                           <select
-                              value={option.option}
-                              onChange={(e) => updateOption(step.id, option.id, 'option', e.target.value)}
-                              className="w-full text-xs p-2 border border-gray-300 rounded appearance-none focus:ring-2 focus:ring-blue-500 bg-white"
-                           >
-                             {OPTION_TYPES.map(ot => <option key={ot} value={ot}>{ot}</option>)}
-                           </select>
-                           <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-2.5 pointer-events-none" />
-                         </div>
-                         <div className="flex-1">
-                           <input
-                              type="text"
-                              value={option.value}
-                              onChange={(e) => updateOption(step.id, option.id, 'value', e.target.value)}
-                              className="w-full text-xs p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                              placeholder="Value (e.g. 123)"
-                           />
-                         </div>
-                         <button 
-                            onClick={() => removeOption(step.id, option.id)}
-                            className="p-2 text-gray-400 hover:text-red-500 transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                      </div>
-                    ))}
-                  </div>
+                <!-- Steps Container -->
+                <div id="stepsContainer" class="space-y-6">
+                    <!-- Steps will be injected here -->
                 </div>
 
-                {/* Mappings Section */}
-                <div className="border-t border-gray-100 pt-4">
-                  <div className="flex justify-between items-center mb-3">
-                    <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-1">
-                      <Database className="w-4 h-4 text-gray-400" /> Data Mappings
-                    </h3>
-                    <button 
-                      onClick={() => addMap(step.id)}
-                      className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-                    >
-                      <Plus className="w-3 h-3" /> Add Map
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    {step.maps.map(map => (
-                      <div key={map.id} className="bg-gray-50 p-3 rounded-lg border border-gray-200 relative group">
-                        <button 
-                          onClick={() => removeMap(step.id, map.id)}
-                          className="absolute -right-2 -top-2 bg-white rounded-full p-1.5 shadow border border-gray-200 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                        
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                          {/* Target (Conditionally filtered based on function) */}
-                          <div className="col-span-2 md:col-span-1">
-                            <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Target Field</label>
-                            <input
-                               type="text"
-                               list={`targets-${step.id}`}
-                               value={map.target}
-                               onChange={(e) => updateMap(step.id, map.id, 'target', e.target.value)}
-                               className="w-full text-xs p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                               placeholder="e.g. FirstName"
-                            />
-                            <datalist id={`targets-${step.id}`}>
-                              {(TARGET_MAPS[step.function] || []).map(t => <option key={t} value={t} />)}
-                            </datalist>
-                          </div>
-                          
-                          {/* Source vs Value */}
-                          <div className="col-span-2 md:col-span-1">
-                            <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Source (Jotform)</label>
-                            <input
-                               type="text"
-                               value={map.source}
-                               onChange={(e) => updateMap(step.id, map.id, 'source', e.target.value)}
-                               className="w-full text-xs p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                               placeholder="Unique field name"
-                               disabled={!!map.value} // Disable if using constant value
-                            />
-                          </div>
-
-                          <div className="col-span-2 md:col-span-1">
-                            <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Constant Value</label>
-                            <input
-                               type="text"
-                               value={map.value}
-                               onChange={(e) => updateMap(step.id, map.id, 'value', e.target.value)}
-                               className="w-full text-xs p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 bg-yellow-50"
-                               placeholder="Overrides Source"
-                               disabled={!!map.source} // Disable if using form source
-                            />
-                          </div>
-
-                          {/* Format */}
-                          <div className="col-span-2 md:col-span-1">
-                            <label className="block text-[10px] uppercase font-bold text-gray-500 mb-1">Format (Optional)</label>
-                            <div className="relative">
-                              <select
-                                value={map.format}
-                                onChange={(e) => updateMap(step.id, map.id, 'format', e.target.value)}
-                                className="w-full text-xs p-2 border border-gray-300 rounded appearance-none focus:ring-2 focus:ring-blue-500 bg-white"
-                              >
-                                <option value="">None</option>
-                                {FORMATS.map(f => <option key={f} value={f}>{f}</option>)}
-                              </select>
-                              <ChevronDown className="w-3 h-3 text-gray-400 absolute right-2 top-2.5 pointer-events-none" />
-                            </div>
-                          </div>
-
-                          {/* Back-reference Path (Optional) */}
-                          <div className="col-span-2 md:col-span-4 mt-1">
-                             <input
-                               type="text"
-                               value={map.path}
-                               onChange={(e) => updateMap(step.id, map.id, 'path', e.target.value)}
-                               className="w-full text-xs p-2 border border-gray-300 border-dashed rounded focus:ring-2 focus:ring-blue-500 bg-gray-50/50"
-                               placeholder="Previous Step Path Reference (Advanced: e.g. /process/package/path)"
-                             />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
+                <button onclick="addStep()" class="w-full py-3 border-2 border-dashed border-blue-300 rounded-xl text-blue-600 font-bold hover:bg-blue-50 transition-colors">
+                    ➕ Add Another Step
+                </button>
             </div>
-          ))}
 
-          <button 
-            onClick={addStep}
-            className="w-full py-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 font-medium hover:border-blue-500 hover:text-blue-600 transition-colors flex justify-center items-center gap-2"
-          >
-            <Plus className="w-5 h-5" /> Add Another Step
-          </button>
+            <!-- JSON Preview Side -->
+            <div class="lg:col-span-1">
+                <div class="sticky top-8 space-y-4">
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-xl font-bold">JSON Output</h2>
+                        <button onclick="copyToClipboard()" class="text-sm text-blue-600 font-semibold hover:underline">Copy JSON</button>
+                    </div>
+                    <p class="text-sm text-slate-500">Ready for your form builder configuration.</p>
+                    <pre id="jsonPreview">{}</pre>
+                </div>
+            </div>
         </div>
-      </div>
-
-      {/* RIGHT PANEL: Live Code Output */}
-      <div className="w-full md:w-1/2 lg:w-2/5 bg-slate-900 flex flex-col h-screen sticky top-0">
-        <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900 z-10">
-          <div>
-            <h2 className="text-white font-semibold">JSON Output</h2>
-            <p className="text-slate-400 text-xs">Ready for JotForms / Form Assembly</p>
-          </div>
-          <button 
-            onClick={handleCopy}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              copied ? 'bg-green-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'
-            }`}
-          >
-            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-            {copied ? 'Copied!' : 'Copy JSON'}
-          </button>
-        </div>
-        
-        <div className="flex-1 p-6 overflow-auto">
-          <pre className="font-mono text-sm text-green-400 leading-relaxed">
-            {generateJSON()}
-          </pre>
-        </div>
-        
-        <div className="p-4 bg-slate-800 text-slate-400 text-xs text-center border-t border-slate-700">
-          Paste this directly into your JotForm `pi_config` default value field.
-        </div>
-      </div>
-      
     </div>
-  );
-}
+
+    <script>
+        // --- Data ---
+        const FUNCTIONS = ['addLead', 'addContact', 'addCampaignMember', 'addToPublicationList', 'addToPublicationListV2', 'addOrganizationAccount', 'addTask'];
+        const TARGET_MAPS = {
+            'addLead': ['FirstName', 'LastName', 'Email', 'Street', 'City', 'StateCode', 'CountryCode', 'PostalCode', 'Company', 'LeadSource', 'Lead_Source_Detail__c'],
+            'addContact': ['FirstName', 'LastName', 'Email', 'MailingStreet', 'MailingCity', 'MailingStateCode', 'MailingCountryCode', 'MailingPostalCode', 'LeadSource', 'Con_SrcDtl__c', 'AccountId', 'RecordType'],
+            'addCampaignMember': ['CampaignId', 'LeadId', 'ContactId', 'Status'],
+            'addToPublicationList': ['LeadId', 'ContactId', 'Campaign__c', 'Publication_List__c', '_optIn'],
+            'addToPublicationListV2': ['LeadId', 'ContactId', 'Campaign__c', 'Publication_List__c', '_optIn'],
+            'addOrganizationAccount': ['Name', 'BillingStreet', 'BillingCity', 'BillingStateCode', 'BillingPostalCode', 'BillingCountryCode', 'ShippingStreet', 'ShippingCity', 'ShippingStateCode', 'ShippingPostalCode', 'ShippingCountryCode', 'ContactId', 'npe5__Role__c'],
+            'addTask': ['Subject', 'Description', 'ContactId', 'LeadId', 'WhatId', 'Status', 'RecordType', 'Campaign__c']
+        };
+        const OPTION_TYPES = ['addToPublicationListByCampaign', 'addToPublicationListByListId', 'addCampaignMember', 'addOrganizationAccount'];
+        const FORMATS = ['None', 'concatenate', 'datetime'];
+
+        const TEMPLATES = {
+            "lead_mult": [{ name: 'lead', function: 'addLead', environment: 're', options: [{ option: 'addToPublicationListByListId', value: '123' }, { option: 'addCampaignMember', value: '7016Q000001MRZZQA4' }], maps: [{ source: 'firstname', target: 'FirstName' }, { source: 'lastname', target: 'LastName' }, { source: 'email', target: 'Email' }] }],
+            "pub_camp": [{ name: 'lead', function: 'addLead', environment: 're', options: [{ option: 'addToPublicationListByCampaign', value: '7016Q000001MRZZQA4' }], maps: [{ source: 'firstname', target: 'FirstName' }, { source: 'lastname', target: 'LastName' }, { source: 'email', target: 'Email' }, { source: 'leadsource', target: 'LeadSource' }] }],
+            "org_acc": [{ name: 'contact', function: 'addContact', environment: 're', options: [{ option: 'addOrganizationAccount', value: 'Mapped' }], maps: [{ source: 'firstname', target: 'FirstName' }, { source: 'lastname', target: 'LastName' }, { source: 'email', target: 'Email' }] }]
+        };
+
+        let state = { steps: [] };
+
+        // --- Core Logic ---
+        function addStep(data = null) {
+            const stepId = crypto.randomUUID();
+            const step = data || {
+                id: stepId,
+                name: `step${state.steps.length + 1}`,
+                function: 'addLead',
+                environment: 're',
+                options: [],
+                maps: [{ id: crypto.randomUUID(), source: '', target: 'FirstName', format: 'None', value: '', path: '' }]
+            };
+            if (!data) step.id = stepId;
+            state.steps.push(step);
+            render();
+        }
+
+        function removeStep(id) {
+            state.steps = state.steps.filter(s => s.id !== id);
+            render();
+        }
+
+        function addOption(stepId) {
+            const step = state.steps.find(s => s.id === stepId);
+            step.options.push({ id: crypto.randomUUID(), option: OPTION_TYPES[0], value: '' });
+            render();
+        }
+
+        function addMap(stepId) {
+            const step = state.steps.find(s => s.id === stepId);
+            const targets = TARGET_MAPS[step.function] || [];
+            step.maps.push({ id: crypto.randomUUID(), source: '', target: targets[0] || '', format: 'None', value: '', path: '' });
+            render();
+        }
+
+        function applyTemplate() {
+            const key = document.getElementById('templateSelector').value;
+            if (!key) return;
+            const template = TEMPLATES[key];
+            state.steps = template.map(s => ({
+                ...s,
+                id: crypto.randomUUID(),
+                options: s.options.map(o => ({ ...o, id: crypto.randomUUID() })),
+                maps: s.maps.map(m => ({ ...m, id: crypto.randomUUID(), format: m.format || 'None', value: m.value || '', path: m.path || '' }))
+            }));
+            render();
+        }
+
+        // --- Rendering ---
+        function render() {
+            const container = document.getElementById('stepsContainer');
+            container.innerHTML = '';
+
+            state.steps.forEach((step, index) => {
+                const stepEl = document.createElement('div');
+                stepEl.className = 'card p-6 space-y-4';
+                
+                const isCustomFunc = !FUNCTIONS.includes(step.function);
+
+                stepEl.innerHTML = `
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-bold text-lg">Step ${index + 1}: ${step.name}</h3>
+                        <button onclick="removeStep('${step.id}')" class="btn-danger">🗑️</button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="label">Step Name</label>
+                            <input type="text" class="input-field" value="${step.name}" oninput="updateStep('${step.id}', 'name', this.value)">
+                        </div>
+                        <div>
+                            <label class="label">Process Function</label>
+                            <select class="input-field mb-2" onchange="updateStep('${step.id}', 'function', this.value)">
+                                ${FUNCTIONS.map(f => `<option value="${f}" ${step.function === f ? 'selected' : ''}>${f}</option>`).join('')}
+                                <option value="CUSTOM" ${isCustomFunc ? 'selected' : ''}>Custom...</option>
+                            </select>
+                            ${isCustomFunc ? `<input type="text" placeholder="Custom function name" class="input-field" value="${step.function}" oninput="updateStep('${step.id}', 'function', this.value)">` : ''}
+                        </div>
+                        <div>
+                            <label class="label">Environment</label>
+                            <input type="text" class="input-field" value="${step.environment}" oninput="updateStep('${step.id}', 'environment', this.value)">
+                        </div>
+                    </div>
+
+                    <div class="border-t pt-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <h4 class="font-bold text-slate-700">⚙️ Options</h4>
+                            <button onclick="addOption('${step.id}')" class="text-sm text-blue-600 font-bold">+ Add Option</button>
+                        </div>
+                        <div class="space-y-3">
+                            ${step.options.map(opt => renderOption(step, opt)).join('')}
+                        </div>
+                    </div>
+
+                    <div class="border-t pt-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <h4 class="font-bold text-slate-700">🔀 Data Mappings</h4>
+                            <button onclick="addMap('${step.id}')" class="text-sm text-blue-600 font-bold">+ Add Map</button>
+                        </div>
+                        <div class="space-y-3">
+                            ${step.maps.map(m => renderMap(step, m)).join('')}
+                        </div>
+                    </div>
+                `;
+                container.appendChild(stepEl);
+            });
+
+            updatePreview();
+        }
+
+        function renderOption(step, opt) {
+            const isCustomOpt = !OPTION_TYPES.includes(opt.option);
+            return `
+                <div class="flex gap-3 items-end bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <div class="flex-grow grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <label class="label">Option Type</label>
+                            <select class="input-field mb-1" onchange="updateOption('${step.id}', '${opt.id}', 'option', this.value)">
+                                ${OPTION_TYPES.map(o => `<option value="${o}" ${opt.option === o ? 'selected' : ''}>${o}</option>`).join('')}
+                                <option value="CUSTOM" ${isCustomOpt ? 'selected' : ''}>Custom...</option>
+                            </select>
+                            ${isCustomOpt ? `<input type="text" placeholder="Custom option type" class="input-field" value="${opt.option}" oninput="updateOption('${step.id}', '${opt.id}', 'option', this.value)">` : ''}
+                        </div>
+                        <div>
+                            <label class="label">Value</label>
+                            <input type="text" class="input-field" value="${opt.value}" oninput="updateOption('${step.id}', '${opt.id}', 'value', this.value)">
+                        </div>
+                    </div>
+                    <button onclick="removeOption('${step.id}', '${opt.id}')" class="btn-danger mb-1">🗑️</button>
+                </div>
+            `;
+        }
+
+        function renderMap(step, m) {
+            const targets = TARGET_MAPS[step.function] || [];
+            const isCustomTgt = !targets.includes(m.target);
+            return `
+                <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 relative group">
+                    <button onclick="removeMap('${step.id}', '${m.id}')" class="absolute top-2 right-2 btn-danger">🗑️</button>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pr-8">
+                        <div>
+                            <label class="label">Target Field</label>
+                            <select class="input-field mb-1" onchange="updateMap('${step.id}', '${m.id}', 'target', this.value)">
+                                ${targets.map(t => `<option value="${t}" ${m.target === t ? 'selected' : ''}>${t}</option>`).join('')}
+                                <option value="CUSTOM" ${isCustomTgt ? 'selected' : ''}>Custom...</option>
+                            </select>
+                            ${isCustomTgt ? `<input type="text" placeholder="Custom target" class="input-field" value="${m.target}" oninput="updateMap('${step.id}', '${m.id}', 'target', this.value)">` : ''}
+                        </div>
+                        <div>
+                            <label class="label">Source Field</label>
+                            <input type="text" class="input-field" value="${m.source}" ${m.value ? 'disabled bg-slate-100' : ''} oninput="updateMap('${step.id}', '${m.id}', 'source', this.value)">
+                        </div>
+                        <div>
+                            <label class="label">Constant Value</label>
+                            <input type="text" class="input-field" value="${m.value}" ${m.source ? 'disabled bg-slate-100' : ''} oninput="updateMap('${step.id}', '${m.id}', 'value', this.value)">
+                        </div>
+                        <div>
+                            <label class="label">Format</label>
+                            <select class="input-field" onchange="updateMap('${step.id}', '${m.id}', 'format', this.value)">
+                                ${FORMATS.map(f => `<option value="${f}" ${m.format === f ? 'selected' : ''}>${f}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <label class="label">Path (Advanced)</label>
+                        <input type="text" class="input-field" placeholder="/process/package/path" value="${m.path || ''}" oninput="updateMap('${step.id}', '${m.id}', 'path', this.value)">
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- State Updates ---
+        function updateStep(id, key, val) {
+            const step = state.steps.find(s => s.id === id);
+            if (val === "CUSTOM") val = "";
+            step[key] = val;
+            render();
+        }
+
+        function updateOption(stepId, optId, key, val) {
+            const step = state.steps.find(s => s.id === stepId);
+            const opt = step.options.find(o => o.id === optId);
+            if (val === "CUSTOM") val = "";
+            opt[key] = val;
+            render();
+        }
+
+        function removeOption(stepId, optId) {
+            const step = state.steps.find(s => s.id === stepId);
+            step.options = step.options.filter(o => o.id !== optId);
+            render();
+        }
+
+        function updateMap(stepId, mapId, key, val) {
+            const step = state.steps.find(s => s.id === stepId);
+            const map = step.maps.find(m => m.id === mapId);
+            if (val === "CUSTOM") val = "";
+            map[key] = val;
+            render();
+        }
+
+        function removeMap(stepId, mapId) {
+            const step = state.steps.find(s => s.id === stepId);
+            step.maps = step.maps.filter(m => m.id !== mapId);
+            render();
+        }
+
+        function updatePreview() {
+            const process = { process: { step: state.steps.map(s => {
+                const stepObj = { name: s.name, function: s.function, environment: s.environment };
+                if (s.options.length) stepObj.options = s.options.map(o => ({ option: o.option, value: o.value }));
+                if (s.maps.length) {
+                    stepObj.map = s.maps.map(m => {
+                        const mObj = {};
+                        if (m.source) mObj.source = m.source;
+                        if (m.target) mObj.target = m.target;
+                        if (m.value) mObj.value = m.value;
+                        if (m.format && m.format !== 'None') mObj.format = m.format;
+                        if (m.path) mObj.path = m.path;
+                        return mObj;
+                    });
+                }
+                return stepObj;
+            }) } };
+            document.getElementById('jsonPreview').textContent = JSON.stringify(process, null, 2);
+        }
+
+        function copyToClipboard() {
+            const text = document.getElementById('jsonPreview').textContent;
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+        }
+
+        // --- Init ---
+        window.onload = () => addStep();
+    </script>
+</body>
+</html>
