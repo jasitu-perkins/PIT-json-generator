@@ -10,6 +10,8 @@
         .card { background: white; border-radius: 0.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; }
         .btn-primary { background-color: #2563eb; color: white; padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; transition: all 0.2s; }
         .btn-primary:hover { background-color: #1d4ed8; }
+        .btn-secondary { background-color: #f1f5f9; color: #475569; padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; transition: all 0.2s; border: 1px solid #e2e8f0; }
+        .btn-secondary:hover { background-color: #e2e8f0; }
         .btn-danger { color: #ef4444; padding: 0.25rem; border-radius: 0.375rem; transition: all 0.2s; }
         .btn-danger:hover { background-color: #fee2e2; }
         .input-field { width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; outline: none; }
@@ -17,7 +19,6 @@
         .label { font-size: 0.875rem; font-weight: 600; color: #475569; margin-bottom: 0.25rem; display: block; }
         pre { background-color: #0f172a; color: #e2e8f0; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; font-family: 'ui-monospace', monospace; font-size: 0.875rem; height: 100%; min-height: 400px; }
         
-        /* Prevent layout shift during re-renders */
         #stepsContainer { min-height: 200px; }
     </style>
 </head>
@@ -29,10 +30,19 @@
         </header>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <!-- Form Builder Side -->
             <div class="lg:col-span-2 space-y-6">
                 
-                <!-- Template Loader -->
+                <!-- NEW: Smart Generator Module -->
+                <div class="card p-6 bg-blue-50 border-blue-200">
+                    <h2 class="text-lg font-bold mb-2 flex items-center text-blue-900">🚀 Smart Template Generator</h2>
+                    <p class="text-sm text-blue-700 mb-4">Paste your form labels/fields below to auto-generate a step.</p>
+                    <textarea id="smartInput" class="input-field mb-3 h-24" placeholder="First Name&#10;Last Name&#10;Email&#10;Company"></textarea>
+                    <div class="flex gap-3">
+                        <button onclick="generateFromFields()" class="btn-primary">Generate Step</button>
+                        <button onclick="document.getElementById('smartInput').value = ''" class="btn-secondary text-sm">Clear</button>
+                    </div>
+                </div>
+
                 <div class="card p-6">
                     <h2 class="text-lg font-bold mb-4 flex items-center">📝 Load from Template</h2>
                     <div class="flex gap-4">
@@ -46,7 +56,6 @@
                     </div>
                 </div>
 
-                <!-- Steps Container -->
                 <div id="stepsContainer" class="space-y-6">
                     <!-- Steps will be injected here -->
                 </div>
@@ -56,14 +65,13 @@
                 </button>
             </div>
 
-            <!-- JSON Preview Side -->
             <div class="lg:col-span-1">
                 <div class="sticky top-8 space-y-4">
                     <div class="flex justify-between items-center">
                         <h2 class="text-xl font-bold">JSON Output</h2>
                         <button onclick="copyToClipboard()" class="text-sm text-blue-600 font-semibold hover:underline">Copy JSON</button>
                     </div>
-                    <p class="text-sm text-slate-500">Ready for your form builder configuration.</p>
+                    <p class="text-sm text-slate-500">Ready for your configuration.</p>
                     <pre id="jsonPreview">{}</pre>
                 </div>
             </div>
@@ -82,12 +90,44 @@
             'addOrganizationAccount': ['Name', 'BillingStreet', 'BillingCity', 'BillingStateCode', 'BillingPostalCode', 'BillingCountryCode', 'ShippingStreet', 'ShippingCity', 'ShippingStateCode', 'ShippingPostalCode', 'ShippingCountryCode', 'ContactId', 'npe5__Role__c'],
             'addTask': ['Subject', 'Description', 'ContactId', 'LeadId', 'WhatId', 'Status', 'RecordType', 'Campaign__c']
         };
-        // Updated Option Types per request
         const OPTION_TYPES = ['addToPublicationListByListIdV2', 'addToPublicationListByCampaign', 'addToPublicationListByListId', 'addCampaignMember', 'addOrganizationAccount'];
         const FORMATS = ['None', 'concatenate', 'datetime'];
 
+        const PUBLICATION_LISTS = [
+            { name: "Archives", id: "700" },
+            { name: "Blind New World", id: "854" },
+            { name: "Career Launch", id: "706" },
+            { name: "College Success", id: "705" },
+            { name: "Community Outreach", id: "702" },
+            { name: "CVI for the TVI", id: "710" },
+            { name: "CVI Now", id: "703" },
+            { name: "eLearning - Professional Development", id: "698" },
+            { name: "Howe Innovation Center", id: "693" },
+            { name: "Library Newsletter", id: "708" },
+            { name: "NEC Newsletter", id: "707" },
+            { name: "Paths to Literacy", id: "687" },
+            { name: "Paths to Technology", id: "688" },
+            { name: "PerKids", id: "685" },
+            { name: "Perkins Braillers", id: "724" }
+        ];
+
+        // Field Matching Logic for Smart Generator
+        const FIELD_SYNONYMS = {
+            'FirstName': ['first name', 'firstname', 'fname', 'given name', 'f name'],
+            'LastName': ['last name', 'lastname', 'lname', 'surname', 'family name', 'l name'],
+            'Email': ['email', 'e-mail', 'email address', 'mail'],
+            'Street': ['street', 'address', 'mailing address', 'address 1'],
+            'City': ['city', 'town'],
+            'StateCode': ['state', 'province', 'state code'],
+            'CountryCode': ['country', 'country code'],
+            'PostalCode': ['zip', 'zipcode', 'postal code', 'post code'],
+            'Company': ['company', 'organization', 'business', 'employer'],
+            'LeadSource': ['lead source', 'source'],
+            'Lead_Source_Detail__c': ['source detail', 'detail']
+        };
+
         const TEMPLATES = {
-            "lead_mult": [{ name: 'lead', function: 'addLead', environment: 're', options: [{ option: 'addToPublicationListByListIdV2', value: '123' }, { option: 'addCampaignMember', value: '7016Q000001MRZZQA4' }], maps: [{ source: 'firstname', target: 'FirstName' }, { source: 'lastname', target: 'LastName' }, { source: 'email', target: 'Email' }] }],
+            "lead_mult": [{ name: 'lead', function: 'addLead', environment: 're', options: [{ option: 'addToPublicationListByListIdV2', value: '123', map: [{ target: '_optIn', source: '[map to boolean]' }] }, { option: 'addCampaignMember', value: '7016Q000001MRZZQA4' }], maps: [{ source: 'firstname', target: 'FirstName' }, { source: 'lastname', target: 'LastName' }, { source: 'email', target: 'Email' }] }],
             "pub_camp": [{ name: 'lead', function: 'addLead', environment: 're', options: [{ option: 'addToPublicationListByCampaign', value: '7016Q000001MRZZQA4' }], maps: [{ source: 'firstname', target: 'FirstName' }, { source: 'lastname', target: 'LastName' }, { source: 'email', target: 'Email' }, { source: 'leadsource', target: 'LeadSource' }] }],
             "org_acc": [{ name: 'contact', function: 'addContact', environment: 're', options: [{ option: 'addOrganizationAccount', value: 'Mapped' }], maps: [{ source: 'firstname', target: 'FirstName' }, { source: 'lastname', target: 'LastName' }, { source: 'email', target: 'Email' }] }]
         };
@@ -95,6 +135,57 @@
         let state = { steps: [] };
 
         // --- Core Logic ---
+        function generateFromFields() {
+            const input = document.getElementById('smartInput').value;
+            if (!input.trim()) return;
+
+            const fields = input.split(/[\n,]/).map(f => f.trim()).filter(f => f.length > 0);
+            const stepId = crypto.randomUUID();
+            const newMaps = [];
+
+            fields.forEach(f => {
+                let matchedTarget = 'FirstName'; // Default fallback
+                const lowerF = f.toLowerCase();
+                
+                // Find matching synonym
+                for (const [target, synonyms] of Object.entries(FIELD_SYNONYMS)) {
+                    if (synonyms.some(s => lowerF.includes(s) || s.includes(lowerF))) {
+                        matchedTarget = target;
+                        break;
+                    }
+                }
+
+                // Simple source formatting: "First Name" -> "firstname"
+                const source = f.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                newMaps.push({
+                    id: crypto.randomUUID(),
+                    source: source,
+                    target: matchedTarget,
+                    format: 'None',
+                    value: ''
+                });
+            });
+
+            const step = {
+                id: stepId,
+                name: `auto_step_${state.steps.length + 1}`,
+                function: 'addLead',
+                environment: 're',
+                options: [],
+                maps: newMaps.length > 0 ? newMaps : [{ id: crypto.randomUUID(), source: '', target: 'FirstName', format: 'None', value: '' }]
+            };
+
+            state.steps.push(step);
+            render();
+            
+            // Scroll to the new step
+            setTimeout(() => {
+                const els = document.getElementById('stepsContainer').children;
+                if(els.length) els[els.length - 1].scrollIntoView({behavior: 'smooth'});
+            }, 100);
+        }
+
         function addStep(data = null) {
             const stepId = crypto.randomUUID();
             const step = data || {
@@ -103,7 +194,7 @@
                 function: 'addLead',
                 environment: 're',
                 options: [],
-                maps: [{ id: crypto.randomUUID(), source: '', target: 'FirstName', format: 'None', value: '', path: '' }]
+                maps: [{ id: crypto.randomUUID(), source: '', target: 'FirstName', format: 'None', value: '' }]
             };
             if (!data) step.id = stepId;
             state.steps.push(step);
@@ -117,14 +208,20 @@
 
         function addOption(stepId) {
             const step = state.steps.find(s => s.id === stepId);
-            step.options.push({ id: crypto.randomUUID(), option: OPTION_TYPES[0], value: '' });
+            const optId = crypto.randomUUID();
+            const type = OPTION_TYPES[0];
+            const newOpt = { id: optId, option: type, value: '' };
+            if (type === 'addToPublicationListByListIdV2') {
+                newOpt.map = [{ target: '_optIn', source: '[map to boolean]' }];
+            }
+            step.options.push(newOpt);
             render();
         }
 
         function addMap(stepId) {
             const step = state.steps.find(s => s.id === stepId);
             const targets = TARGET_MAPS[step.function] || [];
-            step.maps.push({ id: crypto.randomUUID(), source: '', target: targets[0] || '', format: 'None', value: '', path: '' });
+            step.maps.push({ id: crypto.randomUUID(), source: '', target: targets[0] || '', format: 'None', value: '' });
             render();
         }
 
@@ -136,7 +233,7 @@
                 ...s,
                 id: crypto.randomUUID(),
                 options: s.options.map(o => ({ ...o, id: crypto.randomUUID() })),
-                maps: s.maps.map(m => ({ ...m, id: crypto.randomUUID(), format: m.format || 'None', value: m.value || '', path: m.path || '' }))
+                maps: s.maps.map(m => ({ ...m, id: crypto.randomUUID(), format: m.format || 'None', value: m.value || '' }))
             }));
             render();
         }
@@ -144,9 +241,6 @@
         // --- Rendering ---
         function render() {
             const container = document.getElementById('stepsContainer');
-            
-            // To prevent the "jumping" effect when typing (caused by re-rendering the whole list)
-            // we check if the user is currently typing in an input.
             const activeElementId = document.activeElement ? document.activeElement.id : null;
             const selectionStart = document.activeElement ? document.activeElement.selectionStart : null;
 
@@ -154,14 +248,13 @@
 
             state.steps.forEach((step, index) => {
                 const stepEl = document.createElement('div');
-                stepEl.className = 'card p-6 space-y-4';
-                
+                stepEl.className = 'card p-6 space-y-4 border-l-4 border-l-blue-500';
                 const isCustomFunc = !FUNCTIONS.includes(step.function);
 
                 stepEl.innerHTML = `
                     <div class="flex justify-between items-center mb-4">
-                        <h3 class="font-bold text-lg">Step ${index + 1}: ${step.name}</h3>
-                        <button onclick="removeStep('${step.id}')" class="btn-danger">🗑️</button>
+                        <h3 class="font-bold text-lg text-blue-800">Step ${index + 1}: ${step.name}</h3>
+                        <button onclick="removeStep('${step.id}')" class="btn-danger text-sm flex items-center gap-1">🗑️ Remove Step</button>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
@@ -185,7 +278,7 @@
                     <div class="border-t pt-4">
                         <div class="flex justify-between items-center mb-2">
                             <h4 class="font-bold text-slate-700">⚙️ Options</h4>
-                            <button onclick="addOption('${step.id}')" class="text-sm text-blue-600 font-bold">+ Add Option</button>
+                            <button onclick="addOption('${step.id}')" class="text-sm text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded-full hover:bg-blue-100 transition-colors">+ Add Option</button>
                         </div>
                         <div class="space-y-3">
                             ${step.options.map(opt => renderOption(step, opt)).join('')}
@@ -195,32 +288,32 @@
                     <div class="border-t pt-4">
                         <div class="flex justify-between items-center mb-2">
                             <h4 class="font-bold text-slate-700">🔀 Data Mappings</h4>
-                            <button onclick="addMap('${step.id}')" class="text-sm text-blue-600 font-bold">+ Add Map</button>
                         </div>
-                        <div class="space-y-3">
+                        <div class="space-y-3 mb-4">
                             ${step.maps.map(m => renderMap(step, m)).join('')}
                         </div>
+                        <button onclick="addMap('${step.id}')" class="w-full text-sm text-blue-600 font-bold border-2 border-dashed border-blue-200 py-2 rounded-lg hover:bg-blue-50 transition-colors">+ Add Mapping Row</button>
                     </div>
                 `;
                 container.appendChild(stepEl);
             });
 
-            // Restore focus if we were typing
             if (activeElementId) {
                 const el = document.getElementById(activeElementId);
                 if (el) {
                     el.focus();
-                    if (selectionStart !== null) el.setSelectionRange(selectionStart, selectionStart);
+                    if (selectionStart !== null && el.setSelectionRange) el.setSelectionRange(selectionStart, selectionStart);
                 }
             }
-
             updatePreview();
         }
 
         function renderOption(step, opt) {
             const isCustomOpt = !OPTION_TYPES.includes(opt.option);
+            const isPubList = opt.option.includes('PublicationListByListId');
+
             return `
-                <div class="flex gap-3 items-end bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <div class="flex gap-3 items-start bg-slate-50 p-3 rounded-lg border border-slate-200">
                     <div class="flex-grow grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
                             <label class="label">Option Type</label>
@@ -231,11 +324,35 @@
                             ${isCustomOpt ? `<input id="opt-cust-${opt.id}" type="text" placeholder="Custom option type" class="input-field" value="${opt.option}" oninput="silentUpdateOption('${step.id}', '${opt.id}', 'option', this.value)">` : ''}
                         </div>
                         <div>
-                            <label class="label">Value</label>
-                            <input id="opt-val-${opt.id}" type="text" class="input-field" value="${opt.value}" oninput="silentUpdateOption('${step.id}', '${opt.id}', 'value', this.value)">
+                            <label class="label">Value (Internal ID / Campaign ID)</label>
+                            <div class="space-y-1">
+                                ${isPubList ? `
+                                    <select class="input-field mb-1" onchange="silentUpdateOption('${step.id}', '${opt.id}', 'value', this.value); render();">
+                                        <option value="">-- Choose Publication List --</option>
+                                        ${PUBLICATION_LISTS.map(pl => `<option value="${pl.id}" ${opt.value === pl.id ? 'selected' : ''}>${pl.name} (${pl.id})</option>`).join('')}
+                                        <option value="CUSTOM" ${!PUBLICATION_LISTS.find(p => p.id === opt.value) && opt.value ? 'selected' : ''}>Custom/Other...</option>
+                                    </select>
+                                ` : ''}
+                                <input id="opt-val-${opt.id}" type="text" placeholder="Enter ID" class="input-field" value="${opt.value}" oninput="silentUpdateOption('${step.id}', '${opt.id}', 'value', this.value)">
+                            </div>
                         </div>
+                        ${opt.map ? `
+                            <div class="col-span-2 bg-white p-3 rounded border border-blue-100">
+                                <label class="label text-blue-600">Option Logic Mapping (Default)</label>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label class="text-[10px] uppercase text-slate-400 font-bold">Source</label>
+                                        <input type="text" class="input-field py-1 text-sm" value="${opt.map[0].source}" oninput="optMapUpdate('${step.id}', '${opt.id}', 'source', this.value)">
+                                    </div>
+                                    <div>
+                                        <label class="text-[10px] uppercase text-slate-400 font-bold">Target</label>
+                                        <input type="text" class="input-field py-1 text-sm bg-slate-50" value="${opt.map[0].target}" disabled>
+                                    </div>
+                                </div>
+                            </div>
+                        ` : ''}
                     </div>
-                    <button onclick="removeOption('${step.id}', '${opt.id}')" class="btn-danger mb-1">🗑️</button>
+                    <button onclick="removeOption('${step.id}', '${opt.id}')" class="btn-danger mt-6">🗑️</button>
                 </div>
             `;
         }
@@ -248,6 +365,10 @@
                     <button onclick="removeMap('${step.id}', '${m.id}')" class="absolute top-2 right-2 btn-danger">🗑️</button>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pr-8">
                         <div>
+                            <label class="label">Source Field</label>
+                            <input id="map-src-${m.id}" type="text" class="input-field" placeholder="Form ID / Parameter" value="${m.source}" ${m.value ? 'disabled bg-slate-100' : ''} oninput="silentUpdateMap('${step.id}', '${m.id}', 'source', this.value)">
+                        </div>
+                        <div>
                             <label class="label">Target Field</label>
                             <select id="map-tgt-sel-${m.id}" class="input-field mb-1" onchange="updateMap('${step.id}', '${m.id}', 'target', this.value)">
                                 ${targets.map(t => `<option value="${t}" ${m.target === t ? 'selected' : ''}>${t}</option>`).join('')}
@@ -256,12 +377,8 @@
                             ${isCustomTgt ? `<input id="map-tgt-cust-${m.id}" type="text" placeholder="Custom target" class="input-field" value="${m.target}" oninput="silentUpdateMap('${step.id}', '${m.id}', 'target', this.value)">` : ''}
                         </div>
                         <div>
-                            <label class="label">Source Field</label>
-                            <input id="map-src-${m.id}" type="text" class="input-field" value="${m.source}" ${m.value ? 'disabled bg-slate-100' : ''} oninput="silentUpdateMap('${step.id}', '${m.id}', 'source', this.value)">
-                        </div>
-                        <div>
                             <label class="label">Constant Value</label>
-                            <input id="map-val-${m.id}" type="text" class="input-field" value="${m.value}" ${m.source ? 'disabled bg-slate-100' : ''} oninput="silentUpdateMap('${step.id}', '${m.id}', 'value', this.value)">
+                            <input id="map-val-${m.id}" type="text" class="input-field" placeholder="Fixed value" value="${m.value}" ${m.source ? 'disabled bg-slate-100' : ''} oninput="silentUpdateMap('${step.id}', '${m.id}', 'value', this.value)">
                         </div>
                         <div>
                             <label class="label">Format</label>
@@ -270,17 +387,11 @@
                             </select>
                         </div>
                     </div>
-                    <div class="mt-3">
-                        <label class="label">Path (Advanced)</label>
-                        <input id="map-path-${m.id}" type="text" class="input-field" placeholder="/process/package/path" value="${m.path || ''}" oninput="silentUpdateMap('${step.id}', '${m.id}', 'path', this.value)">
-                    </div>
                 </div>
             `;
         }
 
         // --- State Updates ---
-        
-        // Full update (triggers UI re-render) - used for dropdowns and structural changes
         function updateStep(id, key, val) {
             const step = state.steps.find(s => s.id === id);
             if (val === "CUSTOM") val = "";
@@ -288,7 +399,6 @@
             render();
         }
 
-        // Silent update (no re-render) - used for text inputs to prevent jumping
         function silentUpdateStep(id, key, val) {
             const step = state.steps.find(s => s.id === id);
             step[key] = val;
@@ -300,13 +410,28 @@
             const opt = step.options.find(o => o.id === optId);
             if (val === "CUSTOM") val = "";
             opt[key] = val;
+            if (key === 'option') {
+                if (val === 'addToPublicationListByListIdV2') {
+                    opt.map = [{ target: '_optIn', source: '[map to boolean]' }];
+                } else {
+                    delete opt.map;
+                }
+            }
             render();
         }
 
         function silentUpdateOption(stepId, optId, key, val) {
             const step = state.steps.find(s => s.id === stepId);
             const opt = step.options.find(o => o.id === optId);
+            if (val === "CUSTOM") val = "";
             opt[key] = val;
+            updatePreview();
+        }
+
+        function optMapUpdate(stepId, optId, key, val) {
+            const step = state.steps.find(s => s.id === stepId);
+            const opt = step.options.find(o => o.id === optId);
+            opt.map[0][key] = val;
             updatePreview();
         }
 
@@ -341,7 +466,11 @@
             const process = { process: { step: state.steps.map(s => {
                 const stepObj = { name: s.name, function: s.function, environment: s.environment };
                 if (s.options && s.options.length) {
-                    stepObj.options = s.options.map(o => ({ option: o.option, value: o.value }));
+                    stepObj.options = s.options.map(o => {
+                        const out = { option: o.option, value: o.value };
+                        if (o.map) out.map = o.map;
+                        return out;
+                    });
                 }
                 if (s.maps && s.maps.length) {
                     stepObj.map = s.maps.map(m => {
@@ -350,7 +479,6 @@
                         if (m.target) mObj.target = m.target;
                         if (m.value) mObj.value = m.value;
                         if (m.format && m.format !== 'None') mObj.format = m.format;
-                        if (m.path) mObj.path = m.path;
                         return mObj;
                     });
                 }
@@ -369,7 +497,6 @@
             document.body.removeChild(textarea);
         }
 
-        // --- Init ---
         window.onload = () => addStep();
     </script>
 </body>
