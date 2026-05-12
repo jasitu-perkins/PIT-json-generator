@@ -6,7 +6,7 @@
     <title>Perkins Integration Toolkit</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #f8fafc; color: #1e293b; }
+        body { background-color: #f8fafc; color: #1e293b; scroll-behavior: smooth; }
         .card { background: white; border-radius: 0.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; }
         .btn-primary { background-color: #2563eb; color: white; padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; transition: all 0.2s; }
         .btn-primary:hover { background-color: #1d4ed8; }
@@ -15,7 +15,10 @@
         .input-field { width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; outline: none; }
         .input-field:focus { border-color: #3b82f6; ring: 2px ring-blue-200; }
         .label { font-size: 0.875rem; font-weight: 600; color: #475569; margin-bottom: 0.25rem; display: block; }
-        pre { background-color: #0f172a; color: #e2e8f0; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; font-family: 'ui-monospace', monospace; font-size: 0.875rem; }
+        pre { background-color: #0f172a; color: #e2e8f0; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; font-family: 'ui-monospace', monospace; font-size: 0.875rem; height: 100%; min-height: 400px; }
+        
+        /* Prevent layout shift during re-renders */
+        #stepsContainer { min-height: 200px; }
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -79,11 +82,12 @@
             'addOrganizationAccount': ['Name', 'BillingStreet', 'BillingCity', 'BillingStateCode', 'BillingPostalCode', 'BillingCountryCode', 'ShippingStreet', 'ShippingCity', 'ShippingStateCode', 'ShippingPostalCode', 'ShippingCountryCode', 'ContactId', 'npe5__Role__c'],
             'addTask': ['Subject', 'Description', 'ContactId', 'LeadId', 'WhatId', 'Status', 'RecordType', 'Campaign__c']
         };
-        const OPTION_TYPES = ['addToPublicationListByCampaign', 'addToPublicationListByListId', 'addCampaignMember', 'addOrganizationAccount'];
+        // Updated Option Types per request
+        const OPTION_TYPES = ['addToPublicationListByListIdV2', 'addToPublicationListByCampaign', 'addToPublicationListByListId', 'addCampaignMember', 'addOrganizationAccount'];
         const FORMATS = ['None', 'concatenate', 'datetime'];
 
         const TEMPLATES = {
-            "lead_mult": [{ name: 'lead', function: 'addLead', environment: 're', options: [{ option: 'addToPublicationListByListId', value: '123' }, { option: 'addCampaignMember', value: '7016Q000001MRZZQA4' }], maps: [{ source: 'firstname', target: 'FirstName' }, { source: 'lastname', target: 'LastName' }, { source: 'email', target: 'Email' }] }],
+            "lead_mult": [{ name: 'lead', function: 'addLead', environment: 're', options: [{ option: 'addToPublicationListByListIdV2', value: '123' }, { option: 'addCampaignMember', value: '7016Q000001MRZZQA4' }], maps: [{ source: 'firstname', target: 'FirstName' }, { source: 'lastname', target: 'LastName' }, { source: 'email', target: 'Email' }] }],
             "pub_camp": [{ name: 'lead', function: 'addLead', environment: 're', options: [{ option: 'addToPublicationListByCampaign', value: '7016Q000001MRZZQA4' }], maps: [{ source: 'firstname', target: 'FirstName' }, { source: 'lastname', target: 'LastName' }, { source: 'email', target: 'Email' }, { source: 'leadsource', target: 'LeadSource' }] }],
             "org_acc": [{ name: 'contact', function: 'addContact', environment: 're', options: [{ option: 'addOrganizationAccount', value: 'Mapped' }], maps: [{ source: 'firstname', target: 'FirstName' }, { source: 'lastname', target: 'LastName' }, { source: 'email', target: 'Email' }] }]
         };
@@ -140,6 +144,12 @@
         // --- Rendering ---
         function render() {
             const container = document.getElementById('stepsContainer');
+            
+            // To prevent the "jumping" effect when typing (caused by re-rendering the whole list)
+            // we check if the user is currently typing in an input.
+            const activeElementId = document.activeElement ? document.activeElement.id : null;
+            const selectionStart = document.activeElement ? document.activeElement.selectionStart : null;
+
             container.innerHTML = '';
 
             state.steps.forEach((step, index) => {
@@ -156,19 +166,19 @@
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label class="label">Step Name</label>
-                            <input type="text" class="input-field" value="${step.name}" oninput="updateStep('${step.id}', 'name', this.value)">
+                            <input type="text" id="name-${step.id}" class="input-field" value="${step.name}" oninput="silentUpdateStep('${step.id}', 'name', this.value)">
                         </div>
                         <div>
                             <label class="label">Process Function</label>
-                            <select class="input-field mb-2" onchange="updateStep('${step.id}', 'function', this.value)">
+                            <select id="func-select-${step.id}" class="input-field mb-2" onchange="updateStep('${step.id}', 'function', this.value)">
                                 ${FUNCTIONS.map(f => `<option value="${f}" ${step.function === f ? 'selected' : ''}>${f}</option>`).join('')}
                                 <option value="CUSTOM" ${isCustomFunc ? 'selected' : ''}>Custom...</option>
                             </select>
-                            ${isCustomFunc ? `<input type="text" placeholder="Custom function name" class="input-field" value="${step.function}" oninput="updateStep('${step.id}', 'function', this.value)">` : ''}
+                            ${isCustomFunc ? `<input type="text" id="func-cust-${step.id}" placeholder="Custom function name" class="input-field" value="${step.function}" oninput="silentUpdateStep('${step.id}', 'function', this.value)">` : ''}
                         </div>
                         <div>
                             <label class="label">Environment</label>
-                            <input type="text" class="input-field" value="${step.environment}" oninput="updateStep('${step.id}', 'environment', this.value)">
+                            <input type="text" id="env-${step.id}" class="input-field" value="${step.environment}" oninput="silentUpdateStep('${step.id}', 'environment', this.value)">
                         </div>
                     </div>
 
@@ -195,6 +205,15 @@
                 container.appendChild(stepEl);
             });
 
+            // Restore focus if we were typing
+            if (activeElementId) {
+                const el = document.getElementById(activeElementId);
+                if (el) {
+                    el.focus();
+                    if (selectionStart !== null) el.setSelectionRange(selectionStart, selectionStart);
+                }
+            }
+
             updatePreview();
         }
 
@@ -205,15 +224,15 @@
                     <div class="flex-grow grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
                             <label class="label">Option Type</label>
-                            <select class="input-field mb-1" onchange="updateOption('${step.id}', '${opt.id}', 'option', this.value)">
+                            <select id="opt-sel-${opt.id}" class="input-field mb-1" onchange="updateOption('${step.id}', '${opt.id}', 'option', this.value)">
                                 ${OPTION_TYPES.map(o => `<option value="${o}" ${opt.option === o ? 'selected' : ''}>${o}</option>`).join('')}
                                 <option value="CUSTOM" ${isCustomOpt ? 'selected' : ''}>Custom...</option>
                             </select>
-                            ${isCustomOpt ? `<input type="text" placeholder="Custom option type" class="input-field" value="${opt.option}" oninput="updateOption('${step.id}', '${opt.id}', 'option', this.value)">` : ''}
+                            ${isCustomOpt ? `<input id="opt-cust-${opt.id}" type="text" placeholder="Custom option type" class="input-field" value="${opt.option}" oninput="silentUpdateOption('${step.id}', '${opt.id}', 'option', this.value)">` : ''}
                         </div>
                         <div>
                             <label class="label">Value</label>
-                            <input type="text" class="input-field" value="${opt.value}" oninput="updateOption('${step.id}', '${opt.id}', 'value', this.value)">
+                            <input id="opt-val-${opt.id}" type="text" class="input-field" value="${opt.value}" oninput="silentUpdateOption('${step.id}', '${opt.id}', 'value', this.value)">
                         </div>
                     </div>
                     <button onclick="removeOption('${step.id}', '${opt.id}')" class="btn-danger mb-1">🗑️</button>
@@ -230,41 +249,50 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pr-8">
                         <div>
                             <label class="label">Target Field</label>
-                            <select class="input-field mb-1" onchange="updateMap('${step.id}', '${m.id}', 'target', this.value)">
+                            <select id="map-tgt-sel-${m.id}" class="input-field mb-1" onchange="updateMap('${step.id}', '${m.id}', 'target', this.value)">
                                 ${targets.map(t => `<option value="${t}" ${m.target === t ? 'selected' : ''}>${t}</option>`).join('')}
                                 <option value="CUSTOM" ${isCustomTgt ? 'selected' : ''}>Custom...</option>
                             </select>
-                            ${isCustomTgt ? `<input type="text" placeholder="Custom target" class="input-field" value="${m.target}" oninput="updateMap('${step.id}', '${m.id}', 'target', this.value)">` : ''}
+                            ${isCustomTgt ? `<input id="map-tgt-cust-${m.id}" type="text" placeholder="Custom target" class="input-field" value="${m.target}" oninput="silentUpdateMap('${step.id}', '${m.id}', 'target', this.value)">` : ''}
                         </div>
                         <div>
                             <label class="label">Source Field</label>
-                            <input type="text" class="input-field" value="${m.source}" ${m.value ? 'disabled bg-slate-100' : ''} oninput="updateMap('${step.id}', '${m.id}', 'source', this.value)">
+                            <input id="map-src-${m.id}" type="text" class="input-field" value="${m.source}" ${m.value ? 'disabled bg-slate-100' : ''} oninput="silentUpdateMap('${step.id}', '${m.id}', 'source', this.value)">
                         </div>
                         <div>
                             <label class="label">Constant Value</label>
-                            <input type="text" class="input-field" value="${m.value}" ${m.source ? 'disabled bg-slate-100' : ''} oninput="updateMap('${step.id}', '${m.id}', 'value', this.value)">
+                            <input id="map-val-${m.id}" type="text" class="input-field" value="${m.value}" ${m.source ? 'disabled bg-slate-100' : ''} oninput="silentUpdateMap('${step.id}', '${m.id}', 'value', this.value)">
                         </div>
                         <div>
                             <label class="label">Format</label>
-                            <select class="input-field" onchange="updateMap('${step.id}', '${m.id}', 'format', this.value)">
+                            <select id="map-fmt-${m.id}" class="input-field" onchange="updateMap('${step.id}', '${m.id}', 'format', this.value)">
                                 ${FORMATS.map(f => `<option value="${f}" ${m.format === f ? 'selected' : ''}>${f}</option>`).join('')}
                             </select>
                         </div>
                     </div>
                     <div class="mt-3">
                         <label class="label">Path (Advanced)</label>
-                        <input type="text" class="input-field" placeholder="/process/package/path" value="${m.path || ''}" oninput="updateMap('${step.id}', '${m.id}', 'path', this.value)">
+                        <input id="map-path-${m.id}" type="text" class="input-field" placeholder="/process/package/path" value="${m.path || ''}" oninput="silentUpdateMap('${step.id}', '${m.id}', 'path', this.value)">
                     </div>
                 </div>
             `;
         }
 
         // --- State Updates ---
+        
+        // Full update (triggers UI re-render) - used for dropdowns and structural changes
         function updateStep(id, key, val) {
             const step = state.steps.find(s => s.id === id);
             if (val === "CUSTOM") val = "";
             step[key] = val;
             render();
+        }
+
+        // Silent update (no re-render) - used for text inputs to prevent jumping
+        function silentUpdateStep(id, key, val) {
+            const step = state.steps.find(s => s.id === id);
+            step[key] = val;
+            updatePreview();
         }
 
         function updateOption(stepId, optId, key, val) {
@@ -273,6 +301,13 @@
             if (val === "CUSTOM") val = "";
             opt[key] = val;
             render();
+        }
+
+        function silentUpdateOption(stepId, optId, key, val) {
+            const step = state.steps.find(s => s.id === stepId);
+            const opt = step.options.find(o => o.id === optId);
+            opt[key] = val;
+            updatePreview();
         }
 
         function removeOption(stepId, optId) {
@@ -289,6 +324,13 @@
             render();
         }
 
+        function silentUpdateMap(stepId, mapId, key, val) {
+            const step = state.steps.find(s => s.id === stepId);
+            const map = step.maps.find(m => m.id === mapId);
+            map[key] = val;
+            updatePreview();
+        }
+
         function removeMap(stepId, mapId) {
             const step = state.steps.find(s => s.id === stepId);
             step.maps = step.maps.filter(m => m.id !== mapId);
@@ -298,8 +340,10 @@
         function updatePreview() {
             const process = { process: { step: state.steps.map(s => {
                 const stepObj = { name: s.name, function: s.function, environment: s.environment };
-                if (s.options.length) stepObj.options = s.options.map(o => ({ option: o.option, value: o.value }));
-                if (s.maps.length) {
+                if (s.options && s.options.length) {
+                    stepObj.options = s.options.map(o => ({ option: o.option, value: o.value }));
+                }
+                if (s.maps && s.maps.length) {
                     stepObj.map = s.maps.map(m => {
                         const mObj = {};
                         if (m.source) mObj.source = m.source;
